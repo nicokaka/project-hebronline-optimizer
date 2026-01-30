@@ -81,10 +81,10 @@ Basicamente, transformamos horas de trabalho manual em minutos de processamento 
 
 <div align="center">
 
-**Developed by Nícolas Oliveira de Araújo (idogmal)**
+**Developed by Nícolas Oliveira de Araújo (nicokaka)**
 <br>
 IT Infrastructure Professional & Developer
 <br>
-[LinkedIn Profile](SEU_LINK_DO_LINKEDIN_AQUI)
+[LinkedIn Profile](_LINK_DO_LINKEDIN_AQUI)
 
 </div>
