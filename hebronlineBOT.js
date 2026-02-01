@@ -490,7 +490,7 @@
         iniciarOuRetomar() {
             if (this.state.rodando) return;
 
-            const precisaRegiao = (this.state.modo === 'pdv') || (this.state.modo === 'contato' && this.state.acaoContato === 'ativar');
+            const precisaRegiao = (this.state.modo === 'pdv') || (this.state.modo === 'contato' && (this.state.acaoContato === 'ativar' || this.state.acaoContato === 'check'));
 
             if (precisaRegiao) {
                 const regiao = this.state.regiaoSalva;
@@ -523,7 +523,14 @@
 
             if (this.state.modo === 'contato' && this.state.acaoContato === 'ativar') {
                 this.prepararFiltrosContato().then(() => this.loopPrincipal());
-            } else {
+            }
+            else if (this.state.modo === 'contato' && this.state.acaoContato === 'check') {
+                this.ui.log("⚙️ Configurando região...");
+                this.garantirRegiaoPreenchida(this.state.regiaoSalva).then(() => {
+                    this.loopPrincipal();
+                });
+            }
+            else {
                 this.loopPrincipal();
             }
         }
@@ -612,6 +619,14 @@
 
                 if (acao === 'check') {
                     await DOMHelper.sleep(1500); // Wait for AJAX
+
+                    // Verificação de Duplicidade
+                    const linhas = document.querySelectorAll('datatable-body-row');
+                    if (linhas.length >= 2) {
+                        this.ui.log(`⚠ Duplicidade: ${linhas.length} contatos.`);
+                        this.state.registrarErro(crm, `Duplicidade: ${linhas.length} contatos encontrados`);
+                        return; // Pula este item
+                    }
 
                     const check = await DOMHelper.esperarElemento('check_contato', 4000);
                     if (check) {
