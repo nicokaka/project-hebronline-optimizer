@@ -64,7 +64,7 @@
                     else if (tipo === 'btn_menu_tres_pontos') el = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('...') || b.querySelector('p')?.innerText.includes('...'));
                     else if (tipo === 'btn_editar_opcao') el = Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim().includes('Editar'));
                     else if (tipo === 'input_nome_pdv') el = document.querySelector('input[placeholder="Nome"]');
-                    else if (tipo === 'check_contato') el = document.querySelector('datatable-body-cell input[type="checkbox"]');
+                    else if (tipo === 'check_contato') el = document.querySelector('datatable-body-row input[type="checkbox"]');
                     else if (tipo === 'input_crm') el = document.querySelector('input#crm') || document.querySelector('input[placeholder*="Classe"]');
                     else el = document.querySelector(tipo);
 
@@ -148,7 +148,9 @@
                 etapa: 'LISTA',
                 regiaoSalva: '',
                 acaoPDV: 'add',
-                acaoContato: 'check'
+                acaoPDV: 'add',
+                acaoContato: 'check',
+                setorTransferencia: ''
             };
         }
 
@@ -192,6 +194,9 @@
 
         get acaoContato() { return this.dados.acaoContato || 'check'; }
         set acaoContato(v) { this.dados.acaoContato = v; this.salvar(); }
+
+        get setorTransferencia() { return this.dados.setorTransferencia || ''; }
+        set setorTransferencia(v) { this.dados.setorTransferencia = v; this.salvar(); }
     }
 
     /**
@@ -255,6 +260,11 @@
                         <div id="box-regiao-contato" style="display:none; margin-top:5px; border-top:1px solid #444; padding-top:5px;">
                             <label style="color:#aaa;">Região (Para Ativar/Transf):</label>
                             <input type="text" id="bot-input-regiao-contato" value="${this.bot.state.regiaoSalva || ''}" placeholder="Ex: 50" style="width:100%; background:#222; color:white; border:1px solid #555; padding:5px; margin-top:2px;">
+                            
+                            <div id="div-setor-dest" style="margin-top:5px; border-top:1px dashed #444; padding-top:5px;">
+                                <label style="color:#aaa;">Setor Destino (Transf):</label>
+                                <input type="text" id="bot-input-setor" value="${this.bot.state.setorTransferencia || ''}" placeholder="Ex: Setor X" style="width:100%; background:#222; color:white; border:1px solid #555; padding:5px; margin-top:2px;">
+                            </div>
                         </div>
                     </div>
 
@@ -324,6 +334,11 @@
             };
             inputRegiaoPdv.oninput = syncRegiao;
             inputRegiaoContato.oninput = syncRegiao;
+
+            const inputSetor = document.getElementById('bot-input-setor');
+            inputSetor.oninput = (e) => {
+                this.bot.state.setorTransferencia = e.target.value;
+            };
 
             const radiosPdv = document.getElementsByName('acaoPdv');
             radiosPdv.forEach(radio => {
@@ -410,6 +425,15 @@
                 controlesContato.style.display = 'block';
 
                 boxRegiaoContato.style.display = 'block'; // Sempre mostra região em contatos agora
+
+                // Mostrar/Esconder campo Setor apenas se for Check/Transferir
+                const divSetor = document.getElementById('div-setor-dest');
+                if (state.acaoContato === 'check') {
+                    divSetor.style.display = 'block';
+                } else {
+                    divSetor.style.display = 'none';
+                }
+
                 if (!state.rodando && state.fila.length === 0) txt.placeholder = "Lista de CRMs...";
             } else {
                 btnPdv.style.background = '#9b59b6'; btnPdv.style.color = 'white';
@@ -568,6 +592,18 @@
             if (!this.state.rodando) return;
 
             if (this.state.indice >= this.state.fila.length) {
+
+                // SE FINALIZOU A LISTA DE CONTATOS E ESTAVA MARCANDO (TENTAR TRANSFERIR)
+                if (this.state.modo === 'contato' && this.state.acaoContato === 'check') {
+                    this.ui.log("📋 Lista finalizada. Iniciando Transferência...");
+                    await this.executarTransferenciaFinal();
+                    this.state.rodando = false;
+                    this.state.fila = [];
+                    this.state.indice = 0;
+                    this.ui.atualizar();
+                    return;
+                }
+
                 this.ui.atualizar(); // Força atualização visual (100%)
                 await DOMHelper.sleep(300); // Aguarda renderização antes do alert
                 this.ui.log("✅ LISTA CONCLUÍDA!");
@@ -884,6 +920,95 @@
 
         async garantirRegiaoPreenchida(valorRegiao) {
             return await DOMHelper.garantirFiltro('Região', valorRegiao);
+        }
+
+        async executarTransferenciaFinal() {
+            try {
+                this.ui.log("Botão '...' (Menu)...");
+
+                // 1. Clicar nos 3 pontinhos GERAIS (Geralmente acima da tabela ou no cabeçalho)
+                // Precisamos garantir que pegamos o certo. O usuario disse "ir nos 3 pontinhos".
+                // Vamos tentar achar o botão que tem o menu de ações em massa.
+
+                // Tenta achar pelo texto ou classe, geralmente é um botão de menu context
+                // O helper busca qualquer '...'
+                const btnMenu = await DOMHelper.esperarElemento('btn_menu_tres_pontos', 5000);
+
+                if (!btnMenu) {
+                    this.ui.log("❌ Menu '...' não encontrado!");
+                    alert("Não foi possível achar o menu '...' para transferir.");
+                    return;
+                }
+                btnMenu.click();
+                await DOMHelper.sleep(1000);
+
+                // 2. Clicar em "Transferir"
+                // CUIDADO: Pode ter "Transferir todos". O usuario quer "Transferir".
+                const btns = Array.from(document.querySelectorAll('button, a, div[role="menuitem"]'));
+                const btnTransferir = btns.find(b => b.innerText.trim() === 'Transferir'); // Exato, sem "todos"
+
+                if (!btnTransferir) {
+                    this.ui.log("❌ Opção 'Transferir' não achada.");
+                    // Tenta fallback parcial caso o texto tenha icone
+                    const fallback = btns.find(b => b.innerText.includes('Transferir') && !b.innerText.includes('Todos'));
+                    if (fallback) {
+                        fallback.click();
+                    } else {
+                        alert("Opção 'Transferir' não encontrada no menu.");
+                        return;
+                    }
+                } else {
+                    btnTransferir.click();
+                }
+
+                this.ui.log("Aguardando modal...");
+                await DOMHelper.sleep(2000);
+
+                // 3. Selecionar o Setor de Destino
+                // O usuario informou: <input aria-autocomplete="list" ... >
+                const setorDesejado = this.state.setorTransferencia;
+                if (!setorDesejado) {
+                    this.ui.log("⚠️ Setor não informado. Pausando para input manual.");
+                    alert("Preencha o Setor manualmente e confirme.");
+                    return;
+                }
+
+                // Tenta achar o input
+                const inputs = Array.from(document.querySelectorAll('input[aria-autocomplete="list"]'));
+                // Pode haver mais de um, geralmente é o que está visivel no modal
+                const inputSetor = inputs.find(i => i.offsetParent !== null); // Visivel
+
+                if (inputSetor) {
+                    this.ui.log(`Preenchendo Setor: ${setorDesejado}`);
+                    DOMHelper.digitarAngular(inputSetor, setorDesejado);
+
+                    // Tenta confirmar a seleção da lista (dropdown)
+                    await DOMHelper.sleep(1000);
+
+                    // Verificar se apareceu opção para clicar
+                    const opcao = document.querySelector('.ng-option');
+                    if (opcao) {
+                        opcao.click();
+                        this.ui.log("✔ Opção de setor clicada.");
+                    } else {
+                        // Tentar Enter
+                        const enterEvent = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter' });
+                        inputSetor.dispatchEvent(enterEvent);
+                    }
+
+                    this.ui.log("✅ Setor preenchido!");
+                    alert("Tudo pronto! Verifique o setor e clique em CONFIRMAR manualmente.");
+
+                } else {
+                    this.ui.log("❌ Input de Setor não encontrado.");
+                    alert("Não achei o campo de Setor. Preencha manualmente.");
+                }
+
+            } catch (e) {
+                console.error(e);
+                this.ui.log("❌ Erro na transf: " + e.message);
+                alert("Erro ao tentar transferir.");
+            }
         }
     }
 
