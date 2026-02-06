@@ -17,7 +17,7 @@
      * Centraliza constantes e configurações globais
      */
     class Config {
-        static get TEMPO_DIGITACAO() { return 500; }
+        static get TEMPO_DIGITACAO() { return 100; } // Reduced from 500
         static get SUFIXO_EDICAO() { return " $"; }
         static get IS_PROD() {
             return window.location.href.includes('novohebronline.hebron.com.br') &&
@@ -110,7 +110,7 @@
                 }
 
                 this.digitarAngular(input, valorDesejado);
-                await this.sleep(500);
+                await this.sleep(200); // Reduced from 500
 
                 let opcao = document.querySelector('.ng-option');
                 if (opcao) {
@@ -256,9 +256,12 @@
                             <label style="cursor:pointer; color:#2ecc71;">
                                 <input type="radio" name="acaoContato" value="ativar" ${this.bot.state.acaoContato === 'ativar' ? 'checked' : ''}> 🟢 <b>Ativar</b> (Menu)
                             </label>
+                            <label style="cursor:pointer; color:#9b59b6;">
+                                <input type="radio" name="acaoContato" value="flutuante" ${this.bot.state.acaoContato === 'flutuante' ? 'checked' : ''}> 🟣 <b>Flutuante</b> (Setor)
+                            </label>
                         </div>
                         <div id="box-regiao-contato" style="display:none; margin-top:5px; border-top:1px solid #444; padding-top:5px;">
-                            <label style="color:#aaa;">Região (Para Ativar/Transf):</label>
+                            <label id="lbl-regiao-contato" style="color:#aaa;">Região (Para Ativar/Transf):</label>
                             <input type="text" id="bot-input-regiao-contato" value="${this.bot.state.regiaoSalva || ''}" placeholder="Ex: 50" style="width:100%; background:#222; color:white; border:1px solid #555; padding:5px; margin-top:2px;">
                             
                             <div id="div-setor-dest" style="margin-top:5px; border-top:1px dashed #444; padding-top:5px;">
@@ -435,6 +438,17 @@
                 }
 
                 if (!state.rodando && state.fila.length === 0) txt.placeholder = "Lista de CRMs...";
+
+                // Atualiza label dependendo do modo
+                const lblRegiao = document.getElementById('lbl-regiao-contato');
+                const inputRegiao = document.getElementById('bot-input-regiao-contato');
+                if (state.acaoContato === 'flutuante') {
+                    if (lblRegiao) lblRegiao.innerText = "Setor Completo (Ex: 90.10.001):";
+                    if (inputRegiao) inputRegiao.placeholder = "90.10.001";
+                } else {
+                    if (lblRegiao) lblRegiao.innerText = "Região (Para Ativar/Transf):";
+                    if (inputRegiao) inputRegiao.placeholder = "Ex: 50";
+                }
             } else {
                 btnPdv.style.background = '#9b59b6'; btnPdv.style.color = 'white';
                 btnContato.style.background = '#333'; btnContato.style.color = '#aaa';
@@ -514,12 +528,12 @@
         iniciarOuRetomar() {
             if (this.state.rodando) return;
 
-            const precisaRegiao = (this.state.modo === 'pdv') || (this.state.modo === 'contato' && (this.state.acaoContato === 'ativar' || this.state.acaoContato === 'check'));
+            const precisaRegiao = (this.state.modo === 'pdv') || (this.state.modo === 'contato' && (this.state.acaoContato === 'ativar' || this.state.acaoContato === 'check' || this.state.acaoContato === 'flutuante'));
 
             if (precisaRegiao) {
                 const regiao = this.state.regiaoSalva;
                 if (!regiao || regiao.trim() === '') {
-                    alert("ERRO: Preencha o campo 'Região' no painel!");
+                    alert("ERRO: Preencha o campo 'Região/Setor' no painel!");
                     return;
                 }
             }
@@ -554,6 +568,9 @@
                     this.loopPrincipal();
                 });
             }
+            else if (this.state.modo === 'contato' && this.state.acaoContato === 'flutuante') {
+                this.prepararFiltrosFlutuante(this.state.regiaoSalva).then(() => this.loopPrincipal());
+            }
             else {
                 this.loopPrincipal();
             }
@@ -567,6 +584,47 @@
             await DOMHelper.sleep(1000);
             await this.garantirRegiaoPreenchida(this.state.regiaoSalva);
             this.ui.log("⚙️ Filtros prontos.");
+        }
+
+        async prepararFiltrosFlutuante(codigoSetor) {
+            this.ui.log(`⚙️ Configurando filtros Flutuante: ${codigoSetor}`);
+
+            // Parse Sector: 90.10.001
+            // Regiao: 90
+            // Distrito: 90.10
+            // Setor: 90.10.001
+            try {
+                const partes = codigoSetor.split('.');
+                if (partes.length < 3) {
+                    this.ui.log("⚠️ Formato de setor inválido! Use XX.XX.XXX");
+                    // Tenta usar o que tem
+                }
+
+                const regiao = partes[0];
+                const distrito = partes.length >= 2 ? `${partes[0]}.${partes[1]}` : "";
+                const setor = codigoSetor;
+
+                await DOMHelper.garantirFiltro('Tipo de contato', 'Médico');
+                await DOMHelper.sleep(800);
+                await DOMHelper.garantirFiltro('Situação', 'Ativados'); // Agora busca nos ATIVADOS
+                await DOMHelper.sleep(800);
+
+                await DOMHelper.garantirFiltro('Região', regiao);
+                await DOMHelper.sleep(800);
+
+                if (distrito) {
+                    await DOMHelper.garantirFiltro('Distrito', distrito);
+                    await DOMHelper.sleep(800);
+                }
+
+                await DOMHelper.garantirFiltro('Setor', setor);
+                await DOMHelper.sleep(800);
+
+                this.ui.log("⚙️ Filtros setor prontos.");
+
+            } catch (e) {
+                this.ui.log("❌ Erro config filtros: " + e.message);
+            }
         }
 
         pausar() {
@@ -645,6 +703,11 @@
 
             this.ui.log(`[${i}/${t}] CRM: ${crm} (${acao})`);
 
+            // FIX: Re-garantir filtros no modo Flutuante, pois a página reseta ao voltar
+            if (this.state.modo === 'contato' && acao === 'flutuante') {
+                await this.prepararFiltrosFlutuante(this.state.regiaoSalva);
+            }
+
             const input = await DOMHelper.esperarElemento('input_crm', 3000);
             const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Buscar'));
 
@@ -713,6 +776,98 @@
                         }
                     } else {
                         this.ui.log("❌ Não encontrado.");
+                        this.state.registrarErro(crm, "Não encontrado na busca");
+                    }
+                }
+                else if (acao === 'flutuante') {
+                    await DOMHelper.sleep(1000);
+                    // Mesma lógica de navegação do 'ativar' ou 'check' para entrar no detalhes?
+                    // O usuario disse: selecionar contato -> 3 pontinhos -> Editar -> Checkbox -> Salvar
+
+                    const linha = await DOMHelper.esperarElemento('datatable-body-row', 5000);
+                    if (linha) {
+                        // Clica na linha para abrir detalhes (se necessario) ou seleciona direto
+                        // No fluxo de ativar usamos click na linha.
+                        const alvo = linha.querySelector('p.ng-star-inserted') || linha.querySelector('datatable-body-cell') || linha;
+                        alvo.click();
+
+                        // 3 pontinhos
+                        const btnMenu = await DOMHelper.esperarElemento('btn_menu_tres_pontos', 3000);
+                        if (btnMenu) {
+                            btnMenu.click();
+                            await DOMHelper.sleep(500);
+
+                            // Botão Editar
+                            const btnEditar = await DOMHelper.esperarElemento('btn_editar_opcao');
+                            if (btnEditar) {
+                                btnEditar.click();
+                                this.ui.log("✏ Entrando na edição...");
+
+                                // Esperar Checkbox Flutuante
+                                // Selector: input.w-5.h-5.accent-orange-400
+                                // Vamos buscar por classe
+                                await DOMHelper.sleep(2500); // Wait load
+
+                                const checkFlutuante = document.querySelector('input.w-5.h-5.accent-orange-400[type="checkbox"]');
+
+                                if (checkFlutuante) {
+                                    if (!checkFlutuante.checked) {
+                                        this.ui.log("🟣 Marcando Flutuante...");
+                                        checkFlutuante.click();
+                                        checkFlutuante.dispatchEvent(new Event('change', { bubbles: true }));
+                                        await DOMHelper.sleep(500);
+
+                                        // Salvar
+                                        const btnSalvar = DOMHelper.buscarBotao('Salvar');
+                                        if (btnSalvar) {
+                                            btnSalvar.click();
+                                            this.ui.log("💾 Salvo. Voltando...");
+
+                                            // Aguardar retorno à lista
+                                            await DOMHelper.sleep(1000);
+                                            // Esperar que o botão Buscar ou Input CRM reapareça
+                                            const voltou = await DOMHelper.esperarElemento('input_crm', 10000);
+                                            if (!voltou) {
+                                                this.ui.log("⚠️ Demorou voltar. Forçando...");
+                                            } else {
+                                                this.ui.log("🔙 Lista carregada.");
+                                            }
+                                            await DOMHelper.sleep(1000);
+
+                                        } else {
+                                            this.ui.log("⚠️ Botão Salvar não achado.");
+                                            this.state.registrarErro(crm, "Botão Salvar sumiu");
+                                        }
+                                    } else {
+                                        this.ui.log("Info: Já é flutuante.");
+                                        // Voltar ou Salvar? Melhor voltar para não editar sem necessidade?
+                                        // Usuario disse: "marcar... clicar em salvar". O bot pode salvar mesmo assim.
+                                        const btnSalvar = DOMHelper.buscarBotao('Salvar');
+                                        if (btnSalvar) {
+                                            btnSalvar.click();
+                                            await DOMHelper.sleep(1000);
+                                            await DOMHelper.esperarElemento('input_crm', 10000); // Wait return
+                                        }
+                                        await DOMHelper.sleep(1000);
+                                    }
+                                } else {
+                                    this.ui.log("❌ Checkbox Flutuante não achado.");
+                                    this.state.registrarErro(crm, "Checkbox Flutuante não encontrado");
+                                    // Tenta voltar
+                                    const btnVoltar = DOMHelper.buscarBotao('Voltar');
+                                    if (btnVoltar) btnVoltar.click();
+                                }
+
+                            } else {
+                                this.ui.log("⚠️ Botão Editar não achado.");
+                                this.state.registrarErro(crm, "Botão Editar não encontrado");
+                            }
+                        } else {
+                            this.ui.log("⚠️ Menu '...' não achado.");
+                            this.state.registrarErro(crm, "Menu não abriu");
+                        }
+                    } else {
+                        this.ui.log("❌ Contato não encontrado.");
                         this.state.registrarErro(crm, "Não encontrado na busca");
                     }
                 }
