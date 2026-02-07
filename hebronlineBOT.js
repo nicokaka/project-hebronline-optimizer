@@ -796,6 +796,16 @@
                 }
                 else if (acao === 'ativar') {
                     await DOMHelper.sleep(1000);
+
+                    // Verificação de Duplicidade (IGUAL AO CHECK)
+                    await DOMHelper.sleep(1500); // Wait for AJAX
+                    const linhas = document.querySelectorAll('datatable-body-row');
+                    if (linhas.length >= 2) {
+                        this.ui.log(`⚠ Duplicidade: ${linhas.length} contatos.`);
+                        this.state.registrarErro(crm, `Duplicidade: ${linhas.length} contatos encontrados`);
+                        return; // Pula este item e vai para o próximo
+                    }
+
                     const linha = await DOMHelper.esperarElemento('datatable-body-row', 5000);
 
                     if (linha) {
