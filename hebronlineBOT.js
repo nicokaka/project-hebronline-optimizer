@@ -66,6 +66,8 @@
                     else if (tipo === 'input_nome_pdv') el = document.querySelector('input[placeholder="Nome"]');
                     else if (tipo === 'check_contato') el = document.querySelector('datatable-body-row input[type="checkbox"]');
                     else if (tipo === 'input_crm') el = document.querySelector('input#crm') || document.querySelector('input[placeholder*="Classe"]');
+                    else if (tipo === 'input_nome_search') el = document.querySelector('input#name') || document.querySelector('input[placeholder*="descrição"]');
+                    else if (tipo === 'checkbox_flutuante') el = document.querySelector('input.w-5.h-5.accent-orange-400[type="checkbox"]');
                     else el = document.querySelector(tipo);
 
                     if (el) { clearInterval(timer); resolve(el); }
@@ -76,8 +78,9 @@
 
         static buscarBotao(texto) {
             if (texto === 'Salvar') {
-                return document.querySelector('button.bg-orange-dark') ||
-                    Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'Salvar');
+                const btnClass = document.querySelector('button.bg-orange-dark');
+                if (btnClass) return btnClass;
+                return Array.from(document.querySelectorAll('button')).find(b => /Salvar/i.test(b.innerText));
             }
             if (texto === 'Voltar') {
                 return document.querySelector('button.border-dark-blue') ||
@@ -110,15 +113,17 @@
                 }
 
                 this.digitarAngular(input, valorDesejado);
-                await this.sleep(200); // Reduced from 500
+                await this.sleep(1500); // Increased from 200 to allow dropdown fetch
 
                 let opcao = document.querySelector('.ng-option');
                 if (opcao) {
                     opcao.click();
                     return true;
                 } else {
-                    const enterEvent = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter' });
-                    input.dispatchEvent(enterEvent);
+                    // Force Enter more robustly
+                    input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter' }));
+                    input.dispatchEvent(new KeyboardEvent('keypress', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter' }));
+                    input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter' }));
                     return true;
                 }
 
@@ -222,11 +227,11 @@
             // Largura inicial 340px
             // Largura inicial 120px (Minimizado)
             painel.style.cssText = `
-                position: fixed; top: 60px; right: 20px; width: 120px; height: auto;
+                position: fixed; top: 60px; right: 20px; width: 120px; height: 40px;
                 background-color: #1a1a1a; border: 2px solid ${Config.UI.COR_BORDA}; border-radius: 8px;
                 padding: 0; z-index: 999999; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
                 font-family: 'Consolas', monospace; color: white; font-size: 12px;
-            overflow: hidden; display: block; transition: width 0.3s;
+                overflow: hidden; display: block; transition: width 0.3s;
             `;
 
             painel.innerHTML = `
@@ -261,10 +266,16 @@
                             </label>
                         </div>
                         <div id="box-regiao-contato" style="display:none; margin-top:5px; border-top:1px solid #444; padding-top:5px;">
-                            <label id="lbl-regiao-contato" style="color:#aaa;">Região (Para Ativar/Transf):</label>
-                            <input type="text" id="bot-input-regiao-contato" value="${this.bot.state.regiaoSalva || ''}" placeholder="Ex: 50" style="width:100%; background:#222; color:white; border:1px solid #555; padding:5px; margin-top:2px;">
-                            
-                            <div id="div-setor-dest" style="margin-top:5px; border-top:1px dashed #444; padding-top:5px;">
+                                    <span id="lbl-regiao-contato" style="font-size:11px; color:#aaa; display:block; margin-bottom:2px;">Região (Para Ativar/Transf):</span>
+                                    <input type="text" id="bot-input-regiao-contato" value="${this.bot.state.regiaoSalva || ''}" placeholder="Ex: 50" style="width:100%; box-sizing:border-box; background:#222; border:1px solid #444; color:white; padding:4px;">
+                                </div>
+
+                                <div id="box-tipo-contato" style="margin-bottom:8px; display:none;">
+                                    <span style="font-size:11px; color:#aaa; display:block; margin-bottom:2px;">Tipo de Contato (Flutuante):</span>
+                                    <input type="text" id="bot-input-tipo-contato" value="${this.bot.state.tipoContatoFlutuante || 'Médico'}" placeholder="Ex: Farmacêutico" style="width:100%; box-sizing:border-box; background:#222; border:1px solid #444; color:white; padding:4px;">
+                                </div>
+                                
+                                <div id="div-setor-dest" style="margin-bottom:8px; display:none; border-top:1px dashed #444; padding-top:5px;">
                                 <label style="color:#aaa;">Setor Destino (Transf):</label>
                                 <input type="text" id="bot-input-setor" value="${this.bot.state.setorTransferencia || ''}" placeholder="Ex: Setor X" style="width:100%; background:#222; color:white; border:1px solid #555; padding:5px; margin-top:2px;">
                             </div>
@@ -380,12 +391,16 @@
                     corpo.style.display = 'none';
                     // Reduz tamanho para ficar compacto
                     painel.style.width = '120px';
+                    painel.style.height = '40px'; // Force compact height
+                    painel.style.overflow = 'hidden'; // Hide overflow
                     btnMin.innerText = '[ + ]';
                     titulo.style.display = 'none'; // Esconde título para não quebrar
                     logoMin.style.display = 'inline';
                 } else {
                     corpo.style.display = 'block';
                     painel.style.width = '340px';
+                    painel.style.height = 'auto'; // Auto height for content
+                    painel.style.overflow = 'visible';
                     btnMin.innerText = '[ - ]';
                     titulo.style.display = 'block';
                     logoMin.style.display = 'none';
@@ -431,10 +446,19 @@
 
                 // Mostrar/Esconder campo Setor apenas se for Check/Transferir
                 const divSetor = document.getElementById('div-setor-dest');
+                // Mostrar/Esconder campo Tipo Contato apenas se for Flutuante
+                const boxTipo = document.getElementById('box-tipo-contato');
+
                 if (state.acaoContato === 'check') {
                     divSetor.style.display = 'block';
                 } else {
                     divSetor.style.display = 'none';
+                }
+
+                if (state.acaoContato === 'flutuante') {
+                    boxTipo.style.display = 'block';
+                } else {
+                    boxTipo.style.display = 'none';
                 }
 
                 if (!state.rodando && state.fila.length === 0) txt.placeholder = "Lista de CRMs...";
@@ -604,21 +628,30 @@
                 const distrito = partes.length >= 2 ? `${partes[0]}.${partes[1]}` : "";
                 const setor = codigoSetor;
 
-                await DOMHelper.garantirFiltro('Tipo de contato', 'Médico');
-                await DOMHelper.sleep(800);
-                await DOMHelper.garantirFiltro('Situação', 'Ativados'); // Agora busca nos ATIVADOS
-                await DOMHelper.sleep(800);
-
+                // USER STRICT ORDER: Region -> District -> Sector -> Type -> Situation
                 await DOMHelper.garantirFiltro('Região', regiao);
-                await DOMHelper.sleep(800);
 
                 if (distrito) {
                     await DOMHelper.garantirFiltro('Distrito', distrito);
-                    await DOMHelper.sleep(800);
                 }
 
                 await DOMHelper.garantirFiltro('Setor', setor);
-                await DOMHelper.sleep(800);
+
+                // Generic filters applied AFTER location
+                // Dinâmico: Pega o valor do UI. Se estiver vazio ou só espaços, PULA o filtro.
+                const tipoContatoInput = document.getElementById('bot-input-tipo-contato').value;
+
+                if (tipoContatoInput && tipoContatoInput.trim().length > 0) {
+                    this.ui.log(`🔍 Filtro Tipo: ${tipoContatoInput}`);
+                    await DOMHelper.garantirFiltro('Tipo de contato', tipoContatoInput);
+                } else {
+                    this.ui.log(`⚪ Sem filtro de Tipo (Geral).`);
+                }
+
+                await DOMHelper.garantirFiltro('Situação', 'Ativados');
+
+                // Pequeno sleep final apenas para garantir que a tabela carregue
+                await DOMHelper.sleep(500);
 
                 this.ui.log("⚙️ Filtros setor prontos.");
 
@@ -708,10 +741,22 @@
                 await this.prepararFiltrosFlutuante(this.state.regiaoSalva);
             }
 
-            const input = await DOMHelper.esperarElemento('input_crm', 3000);
+            // OTIMIZAÇÃO/CORREÇÃO: Aumentado timeout para 10s para evitar "Erro Input" quando o reload é lento
+            // SMART SEARCH: Detect if CRM (digits) or Name (Text)
+            const isCRM = /\d/.test(crm);
+            const inputSelector = isCRM ? 'input_crm' : 'input_nome_search';
+            const logType = isCRM ? 'CRM' : 'NOME';
+
+            const input = await DOMHelper.esperarElemento(inputSelector, 10000);
             const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Buscar'));
 
             if (input && btn) {
+                // Se for nome, limpar input CRM para garantir (e vice-versa, se possível, mas o HTML separa)
+                if (!isCRM) {
+                    const inputCrm = document.querySelector('input#crm');
+                    if (inputCrm && inputCrm.value) { DOMHelper.digitarAngular(inputCrm, ''); await DOMHelper.sleep(200); }
+                }
+
                 DOMHelper.digitarAngular(input, crm);
                 await DOMHelper.sleep(500);
                 btn.click();
@@ -802,13 +847,14 @@
                             if (btnEditar) {
                                 btnEditar.click();
                                 this.ui.log("✏ Entrando na edição...");
+                                await DOMHelper.sleep(3000); // Explicit sleep for loading stability
 
                                 // Esperar Checkbox Flutuante
                                 // Selector: input.w-5.h-5.accent-orange-400
                                 // Vamos buscar por classe
-                                await DOMHelper.sleep(2500); // Wait load
+                                // await DOMHelper.sleep(2500); // Wait load (REMOVED: Using dynamic wait now)
 
-                                const checkFlutuante = document.querySelector('input.w-5.h-5.accent-orange-400[type="checkbox"]');
+                                const checkFlutuante = await DOMHelper.esperarElemento('checkbox_flutuante', 10000); // Increased timeout to wait for loading animation
 
                                 if (checkFlutuante) {
                                     if (!checkFlutuante.checked) {
@@ -818,21 +864,45 @@
                                         await DOMHelper.sleep(500);
 
                                         // Salvar
+                                        await DOMHelper.sleep(200); // Reduced delay
                                         const btnSalvar = DOMHelper.buscarBotao('Salvar');
-                                        if (btnSalvar) {
-                                            btnSalvar.click();
-                                            this.ui.log("💾 Salvo. Voltando...");
 
-                                            // Aguardar retorno à lista
-                                            await DOMHelper.sleep(1000);
-                                            // Esperar que o botão Buscar ou Input CRM reapareça
+                                        if (btnSalvar) {
+                                            this.ui.log(`🔎 Botão Salvar achado. Disabled: ${btnSalvar.disabled}`);
+
+                                            // VISUAL DEBUG
+                                            btnSalvar.style.border = "5px solid red";
+                                            btnSalvar.style.boxShadow = "0 0 15px yellow";
+
+                                            // FORCE CLICK STRATEGY
+                                            btnSalvar.scrollIntoView({ block: 'center' });
+                                            btnSalvar.focus(); // NEW: Focus first
+
+                                            // Validate Checkbox before saving
+                                            this.ui.log(`Values: Checkbox=${checkFlutuante.checked}`);
+
+                                            btnSalvar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                                            btnSalvar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                                            btnSalvar.click();
+                                            btnSalvar.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+                                            this.ui.log("💾 Clique disparado. Voltando...");
+
+                                            // OTIMIZACAO FINAL: Reduzido para 500ms para agilizar (was 1000ms)
+                                            await DOMHelper.sleep(500);
+
+                                            // Aguardar retorno à lista (sem forçar)
                                             const voltou = await DOMHelper.esperarElemento('input_crm', 10000);
-                                            if (!voltou) {
-                                                this.ui.log("⚠️ Demorou voltar. Forçando...");
-                                            } else {
+                                            if (voltou) {
                                                 this.ui.log("🔙 Lista carregada.");
+                                            } else {
+                                                this.ui.log("⚠️ Demorou voltar (Timeout).");
+                                                // Opcional: Tentar voltar se realmente travou
+                                                const btnVoltar = DOMHelper.buscarBotao('Voltar');
+                                                if (btnVoltar) btnVoltar.click();
                                             }
-                                            await DOMHelper.sleep(1000);
+                                            // Removemos sleep extra de 1000ms
+                                            await DOMHelper.sleep(200);
 
                                         } else {
                                             this.ui.log("⚠️ Botão Salvar não achado.");
