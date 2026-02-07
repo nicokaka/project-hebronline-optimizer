@@ -868,27 +868,19 @@
                                         const btnSalvar = DOMHelper.buscarBotao('Salvar');
 
                                         if (btnSalvar) {
-                                            this.ui.log(`🔎 Botão Salvar achado. Disabled: ${btnSalvar.disabled}`);
-
-                                            // VISUAL DEBUG
-                                            btnSalvar.style.border = "5px solid red";
-                                            btnSalvar.style.boxShadow = "0 0 15px yellow";
-
-                                            // FORCE CLICK STRATEGY
+                                            // FORCE CLICK STRATEGY (Robust Angular Click)
                                             btnSalvar.scrollIntoView({ block: 'center' });
-                                            btnSalvar.focus(); // NEW: Focus first
+                                            btnSalvar.focus();
 
-                                            // Validate Checkbox before saving
-                                            this.ui.log(`Values: Checkbox=${checkFlutuante.checked}`);
-
+                                            // Mouse Event Sequence
                                             btnSalvar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
                                             btnSalvar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
                                             btnSalvar.click();
                                             btnSalvar.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 
-                                            this.ui.log("💾 Clique disparado. Voltando...");
+                                            this.ui.log("💾 Salvo.");
 
-                                            // OTIMIZACAO FINAL: Reduzido para 500ms para agilizar (was 1000ms)
+                                            // OTIMIZACAO FINAL: 500ms
                                             await DOMHelper.sleep(500);
 
                                             // Aguardar retorno à lista (sem forçar)
